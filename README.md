@@ -1,50 +1,124 @@
 # Sistema de Reserva de Equipamentos
 
-Evolução da API de Produtos desenvolvida em aula: o cadastro de "Produto"
-deu lugar ao cadastro de **Equipamento**, e a aplicação passou a controlar
-**reservas de equipamentos** feitas por professores, validando conflitos
-de sala, horário e disponibilidade — conforme o desafio proposto.
+API REST desenvolvida em **Spring Boot** para controlar a reserva de
+equipamentos (datashows, microfones, cabos, extensões etc.) por professores,
+validando automaticamente conflitos de sala, de equipamento e prazos mínimos
+de antecedência.
+
+> Evolução da API de "Produtos" feita em aula: o cadastro de **Produto** deu
+> lugar ao cadastro de **Equipamento**, e a aplicação passou a controlar
+> **reservas** feitas por professores, aplicando as regras de negócio do
+> desafio proposto.
+
+---
 
 ## Tecnologias
 
-- Java 17
-- Spring Boot 3.3 (Web, Data JPA, Validation)
-- Lombok
-- H2 (perfil padrão, em memória) e Oracle (perfil `oracle`, opcional)
-- JUnit 5 + Mockito
-- Insomnia para testes manuais da API
+| Tecnologia | Uso |
+|---|---|
+| Java 17 | Linguagem |
+| Spring Boot 3.3 (Web, Data JPA, Validation) | Framework principal |
+| Lombok | Redução de boilerplate (getters/setters/builders) |
+| H2 Database | Banco em memória (perfil padrão) |
+| Oracle (`ojdbc11`) | Banco alternativo (perfil `oracle`) |
+| JUnit 5 + Mockito | Testes unitários |
+| Insomnia / Postman | Testes manuais da API |
 
-## Como executar
+---
+
+## ▶️ Como executar
 
 ```bash
 ./mvnw spring-boot:run
 ```
 
-A aplicação sobe em `http://localhost:8080`. O H2 já é populado com dados
-de exemplo (`data.sql`): 2 professores, 2 cursos, 2 salas e 5 equipamentos
-(incluindo um `Microfone 01` propositalmente **inativo**, para testar a
-regra 5).
+A aplicação sobe em **`http://localhost:8080`**.
 
-Console H2: `http://localhost:8080/h2-console` (JDBC URL: `jdbc:h2:mem:reservas`, usuário `sa`, sem senha).
+O H2 já é populado automaticamente ao iniciar (`data.sql`) com:
+- 2 professores
+- 2 cursos
+- 2 salas
+- 5 equipamentos (incluindo `Microfone 01`, propositalmente **inativo**, para testar a regra de equipamento inativo)
 
-Para usar Oracle em vez do H2, edite `src/main/resources/application-oracle.properties`
-com os dados do seu banco e rode com `-Dspring.profiles.active=oracle`.
+**Console H2:** `http://localhost:8080/h2-console`
+JDBC URL: `jdbc:h2:mem:reservas` · usuário: `sa` · senha: *(em branco)*
+
+### Usando Oracle em vez do H2
+
+Edite `src/main/resources/application-oracle.properties` com os dados do seu
+banco e rode:
+
+```bash
+./mvnw spring-boot:run -Dspring-boot.run.profiles=oracle
+```
+
+---
 
 ## Modelo de domínio
 
-| Entidade      | Descrição                                                             |
-|---------------|------------------------------------------------------------------------|
-| `Professor`   | Quem solicita a reserva                                               |
-| `Curso`       | Curso vinculado à reserva                                              |
-| `Sala`        | Sala onde os equipamentos serão utilizados                             |
-| `Equipamento` | Evolução da antiga entidade `Produto`. Cada registro é uma **unidade** física (ex.: "Datashow 01"), com um `tipo`, e um flag `ativo` |
-| `Reserva`     | Liga professor + curso + sala + período (`horarioRetirada`/`horarioEntrega`) a uma lista de equipamentos |
+| Entidade | Tabela | Descrição |
+|---|---|---|
+| `Professor` | `professores` | Quem solicita a reserva. Campos: `id`, `nome`, `email` (único). |
+| `Curso` | `cursos` | Curso vinculado à reserva. Campos: `id`, `nome`. |
+| `Sala` | `salas` | Sala onde os equipamentos serão usados. Campos: `id`, `numero` (único), `bloco`. |
+| `Equipamento` | `equipamentos` | Evolução da antiga entidade `Produto`. Cada registro é uma **unidade física** (ex.: "Datashow 01"), não apenas um tipo genérico. Campos: `id`, `identificacao` (única), `tipo`, `descricao`, `ativo`. |
+| `Reserva` | `reservas` | Liga professor + curso + sala + período (`horarioRetirada` → `horarioEntrega`) a uma lista de equipamentos (`reserva_equipamentos`, N:N). Também guarda `dataCriacao` para auditoria. |
 
-## Endpoints principais
+---
 
-Cadastros de apoio (CRUD simples): `/professores`, `/cursos`, `/salas`, `/equipamentos`.
+## Endpoints da API
 
-### `POST /reservas` — criar uma reserva
+Todos os endpoints recebem e retornam JSON. Em caso de erro, o formato de
+resposta é padronizado (veja [Tratamento de erros](#️-tratamento-de-erros)).
+
+### Professores — `/professores`
+
+| Método | Endpoint | Descrição | Corpo (body) |
+|---|---|---|---|
+| `GET` | `/professores` | Lista todos os professores | – |
+| `GET` | `/professores/{id}` | Busca um professor pelo id (404 se não existir) | – |
+| `POST` | `/professores` | Cadastra um novo professor | `{ "nome": "string", "email": "string" }` |
+| `DELETE` | `/professores/{id}` | Exclui um professor | – |
+
+### Cursos — `/cursos`
+
+| Método | Endpoint | Descrição | Corpo (body) |
+|---|---|---|---|
+| `GET` | `/cursos` | Lista todos os cursos | – |
+| `GET` | `/cursos/{id}` | Busca um curso pelo id (404 se não existir) | – |
+| `POST` | `/cursos` | Cadastra um novo curso | `{ "nome": "string" }` |
+| `DELETE` | `/cursos/{id}` | Exclui um curso | – |
+
+### Salas — `/salas`
+
+| Método | Endpoint | Descrição | Corpo (body) |
+|---|---|---|---|
+| `GET` | `/salas` | Lista todas as salas | – |
+| `GET` | `/salas/{id}` | Busca uma sala pelo id (404 se não existir) | – |
+| `POST` | `/salas` | Cadastra uma nova sala | `{ "numero": "string", "bloco": "string" }` |
+| `DELETE` | `/salas/{id}` | Exclui uma sala | – |
+
+### Equipamentos — `/equipamentos`
+
+| Método | Endpoint | Descrição | Corpo (body) |
+|---|---|---|---|
+| `GET` | `/equipamentos` | Lista **todos** os equipamentos (ativos e inativos) | – |
+| `GET` | `/equipamentos/ativos` | Lista somente os equipamentos com `ativo = true` | – |
+| `GET` | `/equipamentos/{id}` | Busca um equipamento pelo id (404 se não existir) | – |
+| `POST` | `/equipamentos` | Cadastra um novo equipamento | `{ "identificacao": "string", "tipo": "string", "descricao": "string", "ativo": true }` |
+| `PUT` | `/equipamentos/{id}` | Atualiza um equipamento existente (ex.: para desativá-lo) | `{ "identificacao": "string", "tipo": "string", "descricao": "string", "ativo": false }` |
+| `DELETE` | `/equipamentos/{id}` | Exclui um equipamento | – |
+
+### Reservas — `/reservas`
+
+| Método | Endpoint | Descrição |
+|---|---|---|
+| `GET` | `/reservas` | Lista todas as reservas |
+| `GET` | `/reservas/{id}` | Busca uma reserva pelo id (404 se não existir) |
+| `POST` | `/reservas` | Cria uma nova reserva, validando todas as regras de negócio |
+| `DELETE` | `/reservas/{id}` | Cancela (exclui) uma reserva |
+
+#### `POST /reservas` — corpo da requisição
 
 ```json
 {
@@ -57,8 +131,66 @@ Cadastros de apoio (CRUD simples): `/professores`, `/cursos`, `/salas`, `/equipa
 }
 ```
 
-Se alguma regra de negócio for violada, a API responde `400 Bad Request`
-com uma mensagem clara do motivo, por exemplo:
+| Campo | Tipo | Obrigatório | Observação |
+|---|---|---|---|
+| `professorId` | `Long` | ✅ | Deve existir na base |
+| `cursoId` | `Long` | ✅ | Deve existir na base |
+| `salaId` | `Long` | ✅ | Deve existir na base |
+| `horarioRetirada` | `LocalDateTime` (ISO-8601) | ✅ | Início do período de uso |
+| `horarioEntrega` | `LocalDateTime` (ISO-8601) | ✅ | Fim do período de uso |
+| `equipamentoIds` | `List<Long>` | ✅ | Ao menos 1 id; ids duplicados são ignorados |
+
+#### Resposta (`200 OK`)
+
+```json
+{
+  "id": 1,
+  "professor": "João da Silva",
+  "curso": "Engenharia de Software",
+  "sala": "204",
+  "horarioRetirada": "2026-09-20T18:30:00",
+  "horarioEntrega": "2026-09-20T22:30:00",
+  "equipamentos": ["Datashow 01", "Cabo HDMI 01", "Extensão 01"]
+}
+```
+
+Um `ReservaResponseDTO` é usado na resposta para não expor as entidades JPA
+diretamente (evita referências cíclicas no JSON e vazamento de detalhes
+internos de mapeamento).
+
+---
+
+## Regras de negócio (`ReservaService`)
+
+Ao criar uma reserva (`POST /reservas`), as regras abaixo são validadas **em
+ordem**, antes de qualquer gravação no banco. Se qualquer uma delas for
+violada, a API responde `400 Bad Request` com a mensagem explicando o motivo.
+
+| # | Regra | Descrição |
+|---|---|---|
+| 1 | **Existência das referências** | Professor, curso, sala e todos os equipamentos informados precisam existir. Caso contrário → `404 Not Found`. |
+| 2 | **Horário válido** | `horarioRetirada` deve ser **estritamente anterior** a `horarioEntrega` (retirada = entrega também é rejeitado). |
+| 3 | **Antecedência mínima de 7 dias** | A reserva precisa ser feita com pelo menos **7 dias** de antecedência da data de retirada, contados a partir de hoje. |
+| 4 | **Equipamento ativo** | Equipamentos com `ativo = false` não podem ser reservados. |
+| 5 | **Conflito de sala** | A sala não pode ter outra reserva com período sobreposto ao solicitado. |
+| 6 | **Conflito de equipamento** | Nenhum dos equipamentos da reserva pode já estar comprometido em outra reserva com período sobreposto. |
+
+### Fórmula de sobreposição de período
+
+A verificação de conflito (sala e equipamento) usa a fórmula clássica de
+intervalos, feita diretamente via JPQL no banco (`ReservaRepository`):
+
+```
+Dois períodos [a, b) e [c, d) se sobrepõem quando:  a < d  E  c < b
+```
+
+Ou seja, uma reserva existente conflita com a nova quando:
+
+```
+retiradaExistente < entregaNova   E   entregaExistente > retiradaNova
+```
+
+### Exemplo de erro (`400 Bad Request`)
 
 ```json
 {
@@ -69,22 +201,39 @@ com uma mensagem clara do motivo, por exemplo:
 }
 ```
 
-Outros endpoints: `GET /reservas`, `GET /reservas/{id}`, `DELETE /reservas/{id}` (cancela a reserva).
+Outros exemplos de mensagens de erro geradas pelas regras:
 
-## Regras de negócio implementadas (`ReservaService`)
+- `"O horário de retirada deve ser anterior ao horário de entrega."`
+- `"Os seguintes equipamentos estão inativos e não podem ser reservados: Microfone 01"`
+- `"A sala 204 já possui uma reserva no período de 2026-09-20T18:30 até 2026-09-20T22:30."`
+- `"O equipamento 'Datashow 01' já está reservado no período de 2026-09-20T18:30 até 2026-09-20T22:30."`
 
-Todas as regras abaixo são validadas, em ordem, antes de qualquer reserva
-ser gravada:
+---
 
-1. **Horário válido** — retirada estritamente anterior à entrega (retirada = entrega também é rejeitado).
-2. **Antecedência mínima** — a reserva precisa ser feita com pelo menos 7 dias de antecedência da data de retirada.
-3. **Equipamento ativo** — equipamentos inativos não podem ser reservados.
-4. **Conflito de sala** — a sala não pode ter outra reserva com período sobreposto.
-5. **Conflito de equipamento** — nenhum dos equipamentos da reserva pode estar comprometido em outra reserva com período sobreposto.
+## Tratamento de erros
 
-A verificação de sobreposição de período usa a fórmula clássica de
-intervalos: dois períodos `[a, b)` e `[c, d)` se sobrepõem quando
-`a < d E c < b`.
+Todas as exceções de negócio e de validação são centralizadas em
+`ApiExceptionHandler` (`@RestControllerAdvice`), garantindo um formato de
+resposta padronizado e consistente em toda a API:
+
+| Situação | Status HTTP | Exceção |
+|---|---|---|
+| Regra de negócio violada (horário, antecedência, conflito, equipamento inativo) | `400 Bad Request` | `ReservaInvalidaException` |
+| Campo inválido no corpo da requisição (`@Valid`) | `400 Bad Request` | `MethodArgumentNotValidException` |
+| Professor, curso, sala, equipamento ou reserva não encontrados | `404 Not Found` | `RecursoNaoEncontradoException` |
+
+Formato padrão do corpo de erro:
+
+```json
+{
+  "timestamp": "2026-09-01T10:00:00",
+  "status": 400,
+  "erro": "Bad Request",
+  "mensagem": "descrição clara do motivo do erro"
+}
+```
+
+---
 
 ## Testes
 
@@ -92,11 +241,18 @@ intervalos: dois períodos `[a, b)` e `[c, d)` se sobrepõem quando
 ./mvnw test
 ```
 
-`ReservaServiceTest` cobre, com Mockito, cada uma das regras acima
-individualmente (professor/curso/sala/equipamento inexistente, horário
-inválido, antecedência insuficiente, equipamento inativo, conflito de
-sala e conflito de equipamento) e o caminho feliz (reserva criada com
-sucesso).
+`ReservaServiceTest` cobre, com Mockito, cada uma das regras de negócio
+individualmente:
+
+- Professor / curso / sala / equipamento inexistente
+- Horário inválido (retirada não anterior à entrega)
+- Antecedência insuficiente (< 7 dias)
+- Equipamento inativo
+- Conflito de sala
+- Conflito de equipamento
+- Caminho feliz (reserva criada com sucesso)
+
+---
 
 ## Estrutura do projeto
 
@@ -104,14 +260,23 @@ sucesso).
 src/main/java/br/com/fiap/reservas/
 ├── entity/       Professor, Curso, Sala, Equipamento, Reserva
 ├── dto/          ReservaRequestDTO, ReservaResponseDTO
-├── repository/   Spring Data JPA + queries de conflito de horário
+├── repository/   Spring Data JPA + queries JPQL de conflito de horário
 ├── service/      Regras de negócio (destaque para ReservaService)
 ├── controller/   Endpoints REST
-└── exception/    Exceções de negócio + handler global (respostas de erro padronizadas)
+└── exception/    Exceções de negócio + handler global (@RestControllerAdvice)
 ```
+
+---
 
 ## Principais melhorias em relação à API de Produtos original
 
-1. Modelagem de domínio completa (Professor, Curso, Sala, Equipamento, Reserva) em vez de uma única entidade.
-2. Motor de validação de regras de negócio centralizado em `ReservaService`, com mensagens de erro claras e tratadas globalmente via `@RestControllerAdvice`.
-3. Consultas de conflito de horário (sala e equipamento) feitas diretamente no banco via JPQL, evitando checar sobreposição de datas "na mão" em memória.
+1. **Modelagem de domínio completa** (`Professor`, `Curso`, `Sala`,
+   `Equipamento`, `Reserva`) em vez de uma única entidade genérica.
+2. **Motor de validação de regras de negócio centralizado** em
+   `ReservaService`, com mensagens de erro claras e tratadas globalmente via
+   `@RestControllerAdvice`.
+3. **Consultas de conflito de horário** (sala e equipamento) feitas
+   diretamente no banco via JPQL, evitando checar sobreposição de datas "na
+   mão" em memória.
+4. **DTOs de entrada e saída** (`ReservaRequestDTO` / `ReservaResponseDTO`)
+   para não expor as entidades JPA diretamente na API.
